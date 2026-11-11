@@ -12,9 +12,16 @@ spec:
       labels:
         app: todo-app
     spec:
+      volumes:
+        - name: image-cache
+          persistentVolumeClaim:
+            claimName: todo-claim
       containers:
         - name: todo-app
-          image: aleveste/todo-app:1.5
+          image: aleveste/todo-app:1.12
           env:
             - name: PORT
               value: "3000"
+          volumeMounts:
+            - name: image-cache
+              mountPath: /usr/src/app/files
