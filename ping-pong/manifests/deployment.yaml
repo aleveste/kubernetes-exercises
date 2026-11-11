@@ -12,9 +12,16 @@ spec:
       labels:
         app: ping-pong
     spec:
+      volumes:
+        - name: shared-files
+          persistentVolumeClaim:
+            claimName: shared-claim
       containers:
         - name: ping-pong
-          image: aleveste/ping-pong:1.9
+          image: aleveste/ping-pong:1.11
           env:
             - name: PORT
               value: "3000"
+          volumeMounts:
+            - name: shared-files
+              mountPath: /usr/src/app/files
