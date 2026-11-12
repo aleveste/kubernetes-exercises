@@ -54,16 +54,7 @@ const serveImage = async (res) => {
   fs.createReadStream(imagePath).pipe(res)
 }
 
-const todos = [
-  'Learn Kubernetes basics',
-  'Deploy application to cluster',
-  'Configure persistent volumes',
-]
-
-const escapeHtml = (text) =>
-  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
-const renderPage = () => `<!DOCTYPE html>
+const page = `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8">
@@ -76,26 +67,65 @@ const renderPage = () => `<!DOCTYPE html>
       button { padding: 12px 24px; font-size: 18px; color: #fff; background: #4caf50; border: 0; border-radius: 4px; cursor: pointer; }
       ul { list-style: none; padding: 0; text-align: left; }
       li { padding: 20px; margin-bottom: 12px; background: #f9f9f9; border-left: 4px solid #4caf50; border-radius: 4px; }
+      #error { color: #c62828; }
     </style>
   </head>
   <body>
     <h1>Todo App</h1>
     <img src="/image" alt="Random picture">
-    <form onsubmit="return false;">
+    <form id="form">
       <input type="text" id="todo" maxlength="140" placeholder="Enter a new todo (max 140 characters)">
       <button type="submit">Send</button>
     </form>
+    <p id="error"></p>
     <h2>Todos</h2>
-    <ul>
-      ${todos.map((todo) => `<li>${escapeHtml(todo)}</li>`).join('\n      ')}
-    </ul>
+    <ul id="todos"></ul>
+    <script>
+      const list = document.getElementById('todos')
+      const input = document.getElementById('todo')
+      const error = document.getElementById('error')
+
+      const render = (todos) => {
+        list.innerHTML = ''
+        todos.forEach((todo) => {
+          const li = document.createElement('li')
+          li.textContent = todo.text
+          list.appendChild(li)
+        })
+      }
+
+      const load = async () => {
+        const res = await fetch('/todos')
+        render(await res.json())
+      }
+
+      document.getElementById('form').addEventListener('submit', async (e) => {
+        e.preventDefault()
+        const text = input.value.trim()
+        if (!text) return
+        const res = await fetch('/todos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
+        if (!res.ok) {
+          error.textContent = 'Could not add the todo'
+          return
+        }
+        error.textContent = ''
+        input.value = ''
+        load()
+      })
+
+      load()
+    </script>
   </body>
 </html>`
 
 const server = http.createServer((req, res) => {
   if (req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html' })
-    res.end(renderPage())
+    res.end(page)
   } else if (req.method === 'GET' && req.url === '/image') {
     serveImage(res)
   } else {
