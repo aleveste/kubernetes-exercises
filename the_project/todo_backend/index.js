@@ -1,4 +1,5 @@
 const http = require('http')
+const { Pool } = require('pg')
 
 const requiredInt = (name) => {
   const value = parseInt(process.env[name], 10)
@@ -12,8 +13,30 @@ const requiredInt = (name) => {
 const port = requiredInt('PORT')
 const maxLength = requiredInt('MAX_TODO_LENGTH')
 
-let nextId = 1
-const todos = []
+const pool = new Pool()
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const errorReason = (err) =>
+  err.code ||
+  err.message ||
+  (err.errors && err.errors.map((e) => `${e.address}:${e.port} ${e.code}`).join(', ')) ||
+  String(err)
+
+const initDatabase = async () => {
+  for (;;) {
+    try {
+      await pool.query(
+        'CREATE TABLE IF NOT EXISTS todos (id SERIAL PRIMARY KEY, text TEXT NOT NULL)'
+      )
+      console.log('Database ready')
+      return
+    } catch (err) {
+      console.error('Database not ready:', errorReason(err))
+      await sleep(3000)
+    }
+  }
+}
 
 const send = (res, status, body) => {
   res.writeHead(status, { 'Content-Type': 'application/json' })
@@ -35,25 +58,36 @@ const readBody = (req) =>
   })
 
 const server = http.createServer(async (req, res) => {
-  if (req.url === '/todos' && req.method === 'GET') {
-    send(res, 200, todos)
-  } else if (req.url === '/todos' && req.method === 'POST') {
-    try {
-      const { text } = JSON.parse(await readBody(req))
+  try {
+    if (req.url === '/todos' && req.method === 'GET') {
+      const { rows } = await pool.query('SELECT id, text FROM todos ORDER BY id')
+      send(res, 200, rows)
+    } else if (req.url === '/todos' && req.method === 'POST') {
+      let text
+      try {
+        text = JSON.parse(await readBody(req)).text
+      } catch (e) {
+        return send(res, 400, { error: 'Invalid request' })
+      }
       if (typeof text !== 'string' || text.trim() === '' || text.length > maxLength) {
         return send(res, 400, { error: `Todo must be 1-${maxLength} characters` })
       }
-      const todo = { id: nextId++, text: text.trim() }
-      todos.push(todo)
-      send(res, 201, todo)
-    } catch (e) {
-      send(res, 400, { error: 'Invalid request' })
+      const { rows } = await pool.query(
+        'INSERT INTO todos (text) VALUES ($1) RETURNING id, text',
+        [text.trim()]
+      )
+      send(res, 201, rows[0])
+    } else {
+      send(res, 404, { error: 'Not found' })
     }
-  } else {
-    send(res, 404, { error: 'Not found' })
+  } catch (err) {
+    console.error('Request failed:', errorReason(err))
+    send(res, 500, { error: 'Database error' })
   }
 })
 
-server.listen(port, () => {
-  console.log(`Server started in port ${port}`)
+initDatabase().then(() => {
+  server.listen(port, () => {
+    console.log(`Server started in port ${port}`)
+  })
 })

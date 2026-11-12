@@ -15,7 +15,13 @@ spec:
     spec:
       containers:
         - name: todo-backend
-          image: aleveste/todo-backend:2.6
+          image: aleveste/todo-backend:2.8
           envFrom:
             - configMapRef:
                 name: todo-backend-config
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
