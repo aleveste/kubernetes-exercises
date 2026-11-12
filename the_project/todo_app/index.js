@@ -2,18 +2,39 @@ const http = require('http')
 const fs = require('fs')
 const path = require('path')
 
-const port = process.env.PORT || 3000
-const dir = process.env.FILES_DIR || '/usr/src/app/files'
-const imagePath = path.join(dir, 'image.jpg')
-const maxAgeMs = (parseInt(process.env.CACHE_MINUTES, 10) || 10) * 60 * 1000
+const required = (name) => {
+  const value = process.env[name]
+  if (!value) {
+    console.error(`Missing environment variable ${name}`)
+    process.exit(1)
+  }
+  return value
+}
 
+const requiredInt = (name) => {
+  const value = parseInt(required(name), 10)
+  if (Number.isNaN(value)) {
+    console.error(`Invalid number in environment variable ${name}`)
+    process.exit(1)
+  }
+  return value
+}
+
+const port = requiredInt('PORT')
+const imageUrl = required('IMAGE_URL')
+const filesDir = required('FILES_DIR')
+const maxAgeMs = requiredInt('CACHE_MINUTES') * 60 * 1000
+const maxTodoLength = requiredInt('MAX_TODO_LENGTH')
+const todosUrl = required('TODOS_URL')
+
+const imagePath = path.join(filesDir, 'image.jpg')
 let refreshing = false
 
 const fetchImage = async () => {
   if (refreshing) return
   refreshing = true
   try {
-    const response = await fetch('https://picsum.photos/1200')
+    const response = await fetch(imageUrl)
     if (!response.ok) throw new Error(`status ${response.status}`)
     const buffer = Buffer.from(await response.arrayBuffer())
     const tmp = `${imagePath}.tmp`
@@ -54,7 +75,9 @@ const serveImage = async (res) => {
   fs.createReadStream(imagePath).pipe(res)
 }
 
-const page = `<!DOCTYPE html>
+const toJs = (value) => JSON.stringify(value).replace(/</g, '\\u003c')
+
+const renderPage = () => `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8">
@@ -74,13 +97,14 @@ const page = `<!DOCTYPE html>
     <h1>Todo App</h1>
     <img src="/image" alt="Random picture">
     <form id="form">
-      <input type="text" id="todo" maxlength="140" placeholder="Enter a new todo (max 140 characters)">
+      <input type="text" id="todo" maxlength="${maxTodoLength}" placeholder="Enter a new todo (max ${maxTodoLength} characters)">
       <button type="submit">Send</button>
     </form>
     <p id="error"></p>
     <h2>Todos</h2>
     <ul id="todos"></ul>
     <script>
+      const TODOS_URL = ${toJs(todosUrl)}
       const list = document.getElementById('todos')
       const input = document.getElementById('todo')
       const error = document.getElementById('error')
@@ -95,7 +119,7 @@ const page = `<!DOCTYPE html>
       }
 
       const load = async () => {
-        const res = await fetch('/todos')
+        const res = await fetch(TODOS_URL)
         render(await res.json())
       }
 
@@ -103,7 +127,7 @@ const page = `<!DOCTYPE html>
         e.preventDefault()
         const text = input.value.trim()
         if (!text) return
-        const res = await fetch('/todos', {
+        const res = await fetch(TODOS_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text }),
@@ -123,16 +147,16 @@ const page = `<!DOCTYPE html>
 </html>`
 
 const server = http.createServer((req, res) => {
-  if (req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'text/html' })
-    res.end(page)
+  if (req.method === 'GET' && req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+    res.end(renderPage())
   } else if (req.method === 'GET' && req.url === '/image') {
     serveImage(res)
   } else {
     res.writeHead(404, { 'Content-Type': 'text/plain' })
     res.end('Not found\n')
   }
-    })
+})
 
 server.listen(port, () => {
   console.log(`Server started in port ${port}`)

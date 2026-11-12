@@ -19,10 +19,13 @@ spec:
             claimName: todo-claim
       containers:
         - name: todo-app
-          image: aleveste/todo-app:2.3
+          image: aleveste/todo-app:2.6
+          envFrom:
+            - configMapRef:
+                name: todo-app-config
           env:
-            - name: PORT
-              value: "3000"
+            - name: FILES_DIR
+              value: /usr/src/app/files
           volumeMounts:
             - name: image-cache
               mountPath: /usr/src/app/files

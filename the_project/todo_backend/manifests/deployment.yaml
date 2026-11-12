@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: todo-backend
-          image: aleveste/todo-backend:2.3
-          env:
-            - name: PORT
-              value: "3001"
+          image: aleveste/todo-backend:2.6
+          envFrom:
+            - configMapRef:
+                name: todo-backend-config

@@ -1,14 +1,19 @@
 const http = require('http')
 
-const port = process.env.PORT || 3001
-const maxLength = 140
+const requiredInt = (name) => {
+  const value = parseInt(process.env[name], 10)
+  if (Number.isNaN(value)) {
+    console.error(`Missing or invalid environment variable ${name}`)
+    process.exit(1)
+  }
+  return value
+}
 
-let nextId = 4
-const todos = [
-  { id: 1, text: 'Learn Kubernetes basics' },
-  { id: 2, text: 'Deploy application to cluster' },
-  { id: 3, text: 'Configure persistent volumes' },
-]
+const port = requiredInt('PORT')
+const maxLength = requiredInt('MAX_TODO_LENGTH')
+
+let nextId = 1
+const todos = []
 
 const send = (res, status, body) => {
   res.writeHead(status, { 'Content-Type': 'application/json' })
