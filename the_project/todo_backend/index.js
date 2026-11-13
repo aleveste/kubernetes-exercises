@@ -10,6 +10,11 @@ const requiredInt = (name) => {
   return value
 }
 
+const log = (level, message, fields = {}) =>
+  console.log(JSON.stringify({ time: new Date().toISOString(), level, message, ...fields }))
+
+const preview = (text) => (typeof text === 'string' ? text.slice(0, 200) : String(text))
+
 const port = requiredInt('PORT')
 const maxLength = requiredInt('MAX_TODO_LENGTH')
 
@@ -58,6 +63,16 @@ const readBody = (req) =>
   })
 
 const server = http.createServer(async (req, res) => {
+  const started = Date.now()
+  res.on('finish', () => {
+    log('info', 'request', {
+      method: req.method,
+      url: req.url,
+      status: res.statusCode,
+      ms: Date.now() - started,
+    })
+  })
+
   try {
     if (req.url === '/todos' && req.method === 'GET') {
       const { rows } = await pool.query('SELECT id, text FROM todos ORDER BY id')
@@ -67,21 +82,33 @@ const server = http.createServer(async (req, res) => {
       try {
         text = JSON.parse(await readBody(req)).text
       } catch (e) {
+        log('warn', 'Todo rejected', { reason: 'invalid request body' })
         return send(res, 400, { error: 'Invalid request' })
       }
-      if (typeof text !== 'string' || text.trim() === '' || text.length > maxLength) {
+      if (typeof text !== 'string' || text.trim() === '') {
+        log('warn', 'Todo rejected', { reason: 'empty or not a string', text: preview(text) })
+        return send(res, 400, { error: 'Todo must be a non-empty string' })
+      }
+      if (text.length > maxLength) {
+        log('warn', 'Todo rejected', {
+          reason: 'too long',
+          length: text.length,
+          maxLength,
+          text: preview(text),
+        })
         return send(res, 400, { error: `Todo must be 1-${maxLength} characters` })
       }
       const { rows } = await pool.query(
         'INSERT INTO todos (text) VALUES ($1) RETURNING id, text',
         [text.trim()]
       )
+      log('info', 'Todo created', { id: rows[0].id, length: text.length, text: preview(text) })
       send(res, 201, rows[0])
     } else {
       send(res, 404, { error: 'Not found' })
     }
   } catch (err) {
-    console.error('Request failed:', errorReason(err))
+    log('error', 'Request failed', { reason: errorReason(err) })
     send(res, 500, { error: 'Database error' })
   }
 })
