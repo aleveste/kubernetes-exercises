@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: wikipedia-todo
+  namespace: project
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: wikipedia-todo
+              image: curlimages/curl:8.10.1
+              env:
+                - name: RANDOM_ARTICLE_URL
+                  value: "https://en.wikipedia.org/wiki/Special:Random"
+                - name: TODOS_URL
+                  value: "http://todo-backend-svc:2347/todos"
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  URL=$(curl -s -o /dev/null -A "todo-cronjob/1.0" -w '%{redirect_url}' "$RANDOM_ARTICLE_URL")
+                  if [ -z "$URL" ]; then
+                    echo "No redirect received from $RANDOM_ARTICLE_URL"
+                    exit 1
+                  fi
+                  echo "Creating todo: Read $URL"
+                  curl -sf -X POST -H 'Content-Type: application/json' \
+                    -d "{\"text\":\"Read $URL\"}" "$TODOS_URL"
