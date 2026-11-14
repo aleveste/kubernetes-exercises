@@ -36,7 +36,9 @@ const reply = (res, status, text) => {
 
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.method === 'GET' && req.url === '/pingpong') {
+    if (req.method === 'GET' && req.url === '/') {
+      reply(res, 200, 'ok\n')
+    } else if (req.method === 'GET' && req.url === '/pingpong') {
       const { rows } = await pool.query(
         'UPDATE counter SET value = value + 1 WHERE id = 1 RETURNING value'
       )
